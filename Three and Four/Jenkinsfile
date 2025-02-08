@@ -1,0 +1,74 @@
+3. Write a Jenkinsfile for a pipeline that accepts parameters (BUILD_VERSION) , print them in the logs and use this parameter as docker image tag
+4. jenkins pipeline flow should be like this
+	-	trigger pipeline build manually
+	-	pipeline starts and pulls a demo code from yout github
+	-	docker build
+	-	docker push to docker hub
+
+	✅ Stored in Jenkins Credentials Store
+
+    No hardcoded usernames or passwords in the Jenkinsfile.
+    Credentials are referenced using credentialsId: 'docker-hub-credentials'.
+    ✅ Used Temporarily in the Pipeline
+
+    withCredentials ensures that credentials exist only within that block.
+    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin prevents exposing passwords in logs.
+    ✅ No Plain Text Exposure
+
+    Jenkins masks credentials in logs, keeping them secure.
+
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'BUILD_VERSION', defaultValue: 'latest', description: 'Version tag for the Docker image')
+    }
+
+    environment {
+        REPO_URL = 'https://github.com/farhadsu/demo-app.git'  // Change to your actual repo
+        IMAGE_NAME = 'farhadsu/demo-app'
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                script {
+                    echo "Cloning repository from ${REPO_URL}"
+                    git branch: 'main', url: REPO_URL
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo "Building Docker image: ${IMAGE_NAME}:${params.BUILD_VERSION}"
+                    sh "docker build -t ${IMAGE_NAME}:${params.BUILD_VERSION} ."
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    echo "Logging into Docker Hub securely"
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh '''
+                            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                            docker push ${IMAGE_NAME}:${BUILD_VERSION}
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline executed successfully!"
+        }
+        failure {
+            echo "Pipeline failed!"
+        }
+    }
+}
